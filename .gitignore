@@ -15,6 +15,13 @@
 .DS_Store
 Thumbs.db
 
+# Python
+__pycache__/
+*.pyc
+.venv/
+uv.lock
+dist/
+
 # Editor files
 *.swp
 *.swo
