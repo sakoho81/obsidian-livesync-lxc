@@ -28,8 +28,7 @@ Generate a setup URI from inside the container — no Obsidian GUI needed.
 
 ```bash
 pct enter CT_ID
-cd /opt/obsidian-livesync
-uv run obsidian-livesync setup-uri \
+obsidian-livesync setup-uri \
   --hostname http://CONTAINER_IP:5984 \
   --database obsidian \
   --username admin \
@@ -48,7 +47,7 @@ obsidian://setuplivesync?settings=...
 To set a custom E2E passphrase for the vault, add `--passphrase`:
 
 ```bash
-uv run obsidian-livesync setup-uri --hostname ... --database ... --password ... --passphrase "my-secret"
+obsidian-livesync setup-uri --hostname ... --database ... --password ... --passphrase "my-secret"
 ```
 
 ## Passphrase types explained

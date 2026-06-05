@@ -109,7 +109,7 @@ tail -f /opt/couchdb/var/log/couchdb.log
 From inside the container:
 
 ```bash
-uv --project /opt/obsidian-livesync run obsidian-livesync check
+obsidian-livesync check
 ```
 
 Or manually:
@@ -136,8 +136,7 @@ rm -rf /opt/couchdb/data/*
 systemctl start couchdb
 
 # Run setup again
-cd /opt/obsidian-livesync
-uv run obsidian-livesync install
+obsidian-livesync install
 ```
 
 ## Getting Help

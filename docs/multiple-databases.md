@@ -20,10 +20,9 @@ Done. No SSH, no Proxmox access needed.
 Inside the container:
 
 ```bash
-cd /opt/obsidian-livesync
-uv run obsidian-livesync db create WORK_VAULT
-uv run obsidian-livesync db list
-uv run obsidian-livesync db delete OLD_VAULT
+obsidian-livesync db create work-vault
+obsidian-livesync db list
+obsidian-livesync db delete old-vault
 ```
 
 CouchDB naming rules: must start with a lowercase letter, and can contain `a-z`, `0-9`, `_`, `$`, `(`, `)`, `+`, `-`, `/`.

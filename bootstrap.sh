@@ -257,7 +257,7 @@ GREEN='\033[0;32m'
 NC='\033[0m'
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 
-log_info "Installing uv..."
+log_info "Installing uv tools..."
 if ! command -v uv &>/dev/null; then
     curl -LsSf https://astral.sh/uv/install.sh | sh
     export PATH="$HOME/.local/bin:$PATH"
@@ -268,9 +268,11 @@ if [[ ! -d /opt/obsidian-livesync ]]; then
     git clone https://github.com/sakoho81/obsidian-livesync-lxc /opt/obsidian-livesync
 fi
 
+log_info "Installing obsidian-livesync tool..."
+uv tool install /opt/obsidian-livesync
+
 log_info "Installing CouchDB and LiveSync..."
-cd /opt/obsidian-livesync
-uv run obsidian-livesync install
+obsidian-livesync install
 INNERSCRIPT
 
 pct push "$CT_ID" /tmp/obsidian-livesync-incontainer.sh /tmp/install.sh

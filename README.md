@@ -56,13 +56,6 @@ obsidian-livesync db create/delete/list  # Manage databases
 obsidian-livesync check        # Verify CouchDB LiveSync config
 ```
 
-From inside the container:
-
-```bash
-cd /opt/obsidian-livesync
-uv run obsidian-livesync --help
-```
-
 ## Documentation
 
 | Guide | Description |
@@ -86,13 +79,13 @@ uv run obsidian-livesync --help
 
 ### Manual in-container install
 
-If you have an existing Debian LXC container, clone the repo inside it and run:
+If you have an existing Debian LXC container:
 
 ```bash
-cd /opt
-git clone https://github.com/sakoho81/obsidian-livesync-lxc.git obsidian-livesync
-cd obsidian-livesync
-uv run obsidian-livesync install
+git clone https://github.com/sakoho81/obsidian-livesync-lxc.git /opt/obsidian-livesync
+cd /opt/obsidian-livesync
+uv tool install .
+obsidian-livesync install
 ```
 
 ### Development
