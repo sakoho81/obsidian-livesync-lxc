@@ -79,12 +79,17 @@ obsidian-livesync check        # Verify CouchDB LiveSync config
 
 ### Manual in-container install
 
-If you have an existing Debian LXC container:
+If you have an existing Debian LXC container (or bare Debian/Ubuntu machine):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/sakoho81/obsidian-livesync-lxc/main/scripts/install-in-container.sh | bash
+```
+
+Or clone and run locally:
 
 ```bash
 git clone https://github.com/sakoho81/obsidian-livesync-lxc.git /opt/obsidian-livesync
-cd /opt/obsidian-livesync
-uv tool install .
+uv tool install /opt/obsidian-livesync
 obsidian-livesync install
 ```
 
@@ -102,16 +107,18 @@ uv run pre-commit run --all-files
 
 ```
 obsidian-livesync-lxc/
-├── bootstrap.sh                # Proxmox host entry point
-├── pyproject.toml              # Python project definition
-├── src/obsidian_livesync/      # Python package
-│   ├── cli.py                  # CLI (install, db, setup-uri, check)
-│   ├── config.py               # Credential management
-│   ├── couchdb.py              # CouchDB operations
-│   └── setup_uri.py            # Setup URI generation
-├── tests/                      # pytest test suite
-├── docs/                       # Documentation
-└── .github/workflows/          # CI
+├── bootstrap.sh                    # Proxmox host entry point
+├── scripts/
+│   └── install-in-container.sh     # In-container CouchDB + LiveSync installer
+├── pyproject.toml                  # Python project definition
+├── src/obsidian_livesync/          # Python package
+│   ├── cli.py                      # CLI (install, db, setup-uri, check)
+│   ├── config.py                   # Credential management
+│   ├── couchdb.py                  # CouchDB operations
+│   └── setup_uri.py                # Setup URI generation
+├── tests/                          # pytest test suite
+├── docs/                           # Documentation
+└── .github/workflows/              # CI
 ```
 
 ## Credits

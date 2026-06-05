@@ -247,40 +247,15 @@ log_info "Container IP: $CT_IP"
 
 # ── Push and run the in-container install script ────────────────────────
 
-log_step "Installing uv + obsidian-livesync inside the container..."
+log_step "Pushing install script to container..."
 
-cat > /tmp/obsidian-livesync-incontainer.sh << 'INNERSCRIPT'
-#!/bin/bash
-set -euo pipefail
+SCRIPT_DIR="$(dirname "$0")"
+IN_CONTAINER_SCRIPT="${SCRIPT_DIR}/scripts/install-in-container.sh"
 
-GREEN='\033[0;32m'
-NC='\033[0m'
-log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
-
-log_info "Installing prerequisites..."
-apt-get update -qq
-apt-get install -y -qq curl git
-
-log_info "Installing uv..."
-curl -LsSf https://astral.sh/uv/install.sh | sh
-export PATH="$HOME/.local/bin:$PATH"
-
-log_info "Cloning obsidian-livesync-lxc..."
-if [[ ! -d /opt/obsidian-livesync ]]; then
-    git clone https://github.com/sakoho81/obsidian-livesync-lxc /opt/obsidian-livesync
-fi
-
-log_info "Installing obsidian-livesync tool..."
-uv tool install /opt/obsidian-livesync
-
-log_info "Installing CouchDB and LiveSync..."
-obsidian-livesync install
-INNERSCRIPT
-
-pct push "$CT_ID" /tmp/obsidian-livesync-incontainer.sh /tmp/install.sh
-rm -f /tmp/obsidian-livesync-incontainer.sh
+pct push "$CT_ID" "$IN_CONTAINER_SCRIPT" /tmp/install.sh
 
 pct exec "$CT_ID" -- bash -c "
+    mkdir -p /root
     cat > /root/.obsidian-livesync-credentials << 'EOF'
 COUCHDB_USER=${COUCHDB_USER}
 COUCHDB_PASSWORD=${COUCHDB_PASSWORD}
@@ -290,7 +265,7 @@ EOF
     chmod 600 /root/.obsidian-livesync-credentials
 "
 
-# Run the install
+log_step "Running install script in container..."
 pct exec "$CT_ID" -- bash /tmp/install.sh
 
 # ── Success ─────────────────────────────────────────────────────────────
