@@ -21,7 +21,7 @@ On your **Proxmox host**:
 ```bash
 git clone https://github.com/sakoho81/obsidian-livesync-lxc.git
 cd obsidian-livesync-lxc
-./bootstrap.sh
+bash bootstrap.sh
 ```
 
 The script will prompt for container configuration, create the LXC, and install CouchDB with LiveSync settings.
