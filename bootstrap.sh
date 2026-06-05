@@ -257,11 +257,13 @@ GREEN='\033[0;32m'
 NC='\033[0m'
 log_info() { echo -e "${GREEN}[INFO]${NC} $1"; }
 
-log_info "Installing uv tools..."
-if ! command -v uv &>/dev/null; then
-    curl -LsSf https://astral.sh/uv/install.sh | sh
-    export PATH="$HOME/.local/bin:$PATH"
-fi
+log_info "Installing prerequisites..."
+apt-get update -qq
+apt-get install -y -qq curl git
+
+log_info "Installing uv..."
+curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
 
 log_info "Cloning obsidian-livesync-lxc..."
 if [[ ! -d /opt/obsidian-livesync ]]; then
