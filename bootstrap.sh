@@ -245,13 +245,22 @@ fi
 
 log_info "Container IP: $CT_IP"
 
-# ── Push and run the in-container install script ────────────────────────
+# ── Push the repo and install script ────────────────────────────────────
 
-log_step "Pushing install script to container..."
+log_step "Pushing repo and install script to container..."
 
 SCRIPT_DIR="$(dirname "$0")"
 IN_CONTAINER_SCRIPT="${SCRIPT_DIR}/scripts/install-in-container.sh"
 
+# Push the entire repo as a tarball (exclude .git)
+REPO_TARBALL="/tmp/obsidian-livesync-repo.tar.gz"
+tar czf "$REPO_TARBALL" -C "$SCRIPT_DIR" --exclude .git .
+pct push "$CT_ID" "$REPO_TARBALL" /tmp/repo.tar.gz
+pct exec "$CT_ID" -- mkdir -p /opt/obsidian-livesync
+pct exec "$CT_ID" -- tar xzf /tmp/repo.tar.gz -C /opt/obsidian-livesync
+rm -f "$REPO_TARBALL"
+
+# Push the install script
 pct push "$CT_ID" "$IN_CONTAINER_SCRIPT" /tmp/install.sh
 
 pct exec "$CT_ID" -- bash -c "

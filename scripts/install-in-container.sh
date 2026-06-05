@@ -31,7 +31,10 @@ fi
 
 log_info "Cloning obsidian-livesync-lxc..."
 if [[ ! -d /opt/obsidian-livesync ]]; then
-    git clone https://github.com/sakoho81/obsidian-livesync-lxc /opt/obsidian-livesync
+    git clone -b py/rewrite https://github.com/sakoho81/obsidian-livesync-lxc /opt/obsidian-livesync
+else
+    log_info "Existing installation found, updating..."
+    git -C /opt/obsidian-livesync pull origin py/rewrite || true
 fi
 
 log_info "Installing obsidian-livesync tool..."
