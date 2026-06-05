@@ -27,6 +27,7 @@ package = true
 
 [dependency-groups]
 dev = [
+    "pre-commit>=4.6.0",
     "pytest>=8",
     "pytest-httpx>=0.35",
     "pytest-mock>=3.14",
