@@ -1,104 +1,84 @@
 """Tests for setup URI generation."""
 
-import subprocess
-
-import pytest
-
 from obsidian_livesync.setup_uri import generate_setup_uri
 
 
-def test_generate_setup_uri_parses_output(mocker):
-    stdout = (
-        "\n"
-        "Your passphrase of Setup-URI is:  patient-haze\n"
-        "This passphrase is never shown again, so please note it in a safe place.\n"
-        "obsidian://setuplivesync?settings=%5B%22encrypteddata%22%5D\n"
-    )
-    mock_run = mocker.patch("subprocess.run")
-    mock_run.return_value = subprocess.CompletedProcess(
-        args=[],
-        returncode=0,
-        stdout=stdout,
-        stderr="",
-    )
-
-    mocker.patch(
-        "obsidian_livesync.setup_uri._find_deno",
-        return_value="/usr/bin/deno",
-    )
-
+def test_generate_setup_uri_returns_valid_format():
     uri, passphrase = generate_setup_uri(
         hostname="http://localhost:5984",
         database="obsidian",
         username="admin",
         password="pass",
     )
+    assert uri.startswith("obsidian://setuplivesync?settings=%25")
+    assert "-" in passphrase
 
-    assert uri == "obsidian://setuplivesync?settings=%5B%22encrypteddata%22%5D"
-    assert passphrase == "patient-haze"
 
-
-def test_generate_setup_uri_no_deno_raises(mocker):
-    mocker.patch(
-        "obsidian_livesync.setup_uri._find_deno",
-        return_value=None,
+def test_generate_setup_uri_with_custom_passphrase():
+    uri, passphrase = generate_setup_uri(
+        hostname="http://localhost:5984",
+        database="obsidian",
+        username="admin",
+        password="pass",
+        passphrase="my-custom-pass",
     )
-
-    with pytest.raises(RuntimeError, match="Deno"):
-        generate_setup_uri(
-            hostname="http://localhost:5984",
-            database="obsidian",
-            username="admin",
-            password="pass",
-        )
+    assert uri.startswith("obsidian://setuplivesync?settings=%25")
+    assert passphrase == "my-custom-pass"
 
 
-def test_generate_setup_uri_failure(mocker):
-    mocker.patch(
-        "obsidian_livesync.setup_uri._find_deno",
-        return_value="/usr/bin/deno",
+def test_generate_setup_uri_different_calls_different_outputs():
+    uri1, _ = generate_setup_uri(
+        hostname="http://localhost:5984",
+        database="obsidian",
+        username="admin",
+        password="pass",
     )
-    mock_run = mocker.patch("subprocess.run")
-    mock_run.return_value = subprocess.CompletedProcess(
-        args=[],
-        returncode=1,
-        stdout="",
-        stderr="Error: invalid configuration",
+    uri2, _ = generate_setup_uri(
+        hostname="http://localhost:5984",
+        database="obsidian",
+        username="admin",
+        password="pass",
     )
-
-    with pytest.raises(RuntimeError, match="Setup URI generation failed"):
-        generate_setup_uri(
-            hostname="http://localhost:5984",
-            database="obsidian",
-            username="admin",
-            password="pass",
-        )
+    assert uri1 != uri2
 
 
-def test_generate_setup_uri_passes_environment(mocker):
-    mocker.patch(
-        "obsidian_livesync.setup_uri._find_deno",
-        return_value="/usr/bin/deno",
+def test_generate_setup_uri_vault_with_same_passphrase_same_output():
+    """Same passphrase should produce different URIs due to random salt/iv."""
+    uri1, p1 = generate_setup_uri(
+        hostname="http://localhost:5984",
+        database="obsidian",
+        username="admin",
+        password="pass",
+        passphrase="shared-secret",
     )
-    mock_run = mocker.patch("subprocess.run")
-    mock_run.return_value = subprocess.CompletedProcess(
-        args=[],
-        returncode=0,
-        stdout="obsidian://setuplivesync?settings=abc\n",
-        stderr="",
+    uri2, p2 = generate_setup_uri(
+        hostname="http://localhost:5984",
+        database="obsidian",
+        username="admin",
+        password="pass",
+        passphrase="shared-secret",
     )
+    assert p1 == p2 == "shared-secret"
+    # Different URIs because salt/iv are random each time
+    assert uri1 != uri2
 
-    generate_setup_uri(
-        hostname="https://example.com:5984",
-        database="my-vault",
-        username="bob",
-        password="s3cret",
-        passphrase="my-pass",
+
+def test_generate_setup_uri_format_contains_percent_prefix():
+    uri, _ = generate_setup_uri(
+        hostname="http://x:5984",
+        database="db",
+        username="u",
+        password="p",
     )
-
-    call_env = mock_run.call_args.kwargs["env"]
-    assert call_env["hostname"] == "https://example.com:5984"
-    assert call_env["database"] == "my-vault"
-    assert call_env["username"] == "bob"
-    assert call_env["password"] == "s3cret"
-    assert call_env["passphrase"] == "my-pass"
+    # Extract the settings payload
+    settings = uri.split("settings=", 1)[1]
+    # URL-decode it
+    from urllib.parse import unquote
+    decoded = unquote(settings)
+    # Format: %<hex_iv_32><hex_salt_32><base64>
+    assert len(decoded) > 65
+    assert decoded[0] == "%"
+    # IV hex part (32 chars)
+    assert all(c in "0123456789abcdef" for c in decoded[1:33])
+    # Salt hex part (32 chars)
+    assert all(c in "0123456789abcdef" for c in decoded[33:65])

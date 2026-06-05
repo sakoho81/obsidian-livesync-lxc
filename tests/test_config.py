@@ -1,8 +1,12 @@
 """Tests for credentials management."""
 
-import pytest
+from pathlib import Path
 
-from obsidian_livesync.config import Credentials
+from obsidian_livesync.config import (
+    Credentials,
+    FileBackend,
+    set_backend,
+)
 
 
 def test_defaults():
@@ -49,9 +53,10 @@ def test_get_env_exports():
     assert "export COUCHDB_PORT='5984'" in exports
 
 
-def test_save_and_load(monkeypatch, tmp_path):
+def test_save_and_load(tmp_path):
     creds_path = tmp_path / ".obsidian-livesync-credentials"
-    monkeypatch.setattr("obsidian_livesync.config.CREDS_FILE", creds_path)
+    backend = FileBackend(creds_path)
+    set_backend(backend)
 
     original = Credentials(
         couchdb_user="admin",
@@ -61,6 +66,7 @@ def test_save_and_load(monkeypatch, tmp_path):
     original.save()
 
     assert creds_path.exists()
+
     loaded = Credentials.load()
     assert loaded.couchdb_user == "admin"
     assert loaded.couchdb_password == "hunter2"
@@ -68,33 +74,55 @@ def test_save_and_load(monkeypatch, tmp_path):
     assert loaded.couchdb_port == 5984
 
 
-def test_load_missing_file(monkeypatch, tmp_path):
+def test_password_obfuscated_on_disk(tmp_path):
+    creds_path = tmp_path / ".obsidian-livesync-credentials"
+    backend = FileBackend(creds_path)
+    set_backend(backend)
+
+    Credentials(
+        couchdb_user="admin",
+        couchdb_password="secret123",
+        database_name="obsidian",
+    ).save()
+
+    raw = creds_path.read_text()
+    assert "secret123" not in raw
+    assert "b64:" in raw
+
+
+def test_load_missing_file(tmp_path):
     missing = tmp_path / "nonexistent"
-    monkeypatch.setattr("obsidian_livesync.config.CREDS_FILE", missing)
+    backend = FileBackend(missing)
+    set_backend(backend)
+
     c = Credentials.load()
     assert c.couchdb_user == ""
     assert c.couchdb_password == ""
 
 
-def test_load_ignores_comments_and_blanks(monkeypatch, tmp_path):
+def test_load_ignores_comments_and_blanks(tmp_path):
     creds_path = tmp_path / ".obsidian-livesync-credentials"
-    monkeypatch.setattr("obsidian_livesync.config.CREDS_FILE", creds_path)
     creds_path.write_text(
         "# comment line\n"
         "COUCHDB_USER=admin\n"
         "\n"
-        "COUCHDB_PASSWORD=test\n"
+        "COUCHDB_PASSWORD=b64:dGVzdA==\n"
         "DATABASE_NAME=vault\n"
         "COUCHDB_PORT=5984\n"
     )
+    backend = FileBackend(creds_path)
+    set_backend(backend)
+
     loaded = Credentials.load()
     assert loaded.couchdb_user == "admin"
     assert loaded.couchdb_password == "test"
     assert loaded.database_name == "vault"
 
 
-def test_save_file_permissions(monkeypatch, tmp_path):
+def test_save_file_permissions(tmp_path):
     creds_path = tmp_path / ".obsidian-livesync-credentials"
-    monkeypatch.setattr("obsidian_livesync.config.CREDS_FILE", creds_path)
+    backend = FileBackend(creds_path)
+    set_backend(backend)
+
     Credentials(couchdb_user="u", couchdb_password="p").save()
     assert creds_path.stat().st_mode & 0o777 == 0o600

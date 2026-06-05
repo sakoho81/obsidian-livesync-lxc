@@ -1,9 +1,81 @@
-"""Credentials file management."""
+"""Credentials management with pluggable backends."""
 
+from __future__ import annotations
+
+import base64
 from pathlib import Path
-from typing import Optional
+from typing import Protocol
 
-CREDS_FILE = Path("/root/.obsidian-livesync-credentials")
+DEFAULT_CREDS_FILE = Path("/root/.obsidian-livesync-credentials")
+
+
+class CredentialBackend(Protocol):
+    """Pluggable credential storage.
+
+    Implement this protocol to swap storage backends (file, Infisical, keyring, etc).
+    """
+
+    def load(self) -> dict[str, str]:
+        """Return a dict of credential key-value pairs."""
+        ...
+
+    def save(self, values: dict[str, str]) -> None:
+        """Persist the given credential values."""
+        ...
+
+
+class FileBackend:
+    """File-based credential storage with minimal obfuscation."""
+
+    def __init__(self, path: Path = DEFAULT_CREDS_FILE):
+        self.path = path
+
+    def load(self) -> dict[str, str]:
+        if not self.path.exists():
+            return {}
+        values: dict[str, str] = {}
+        for line in self.path.read_text().splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if "=" not in line:
+                continue
+            key, val = line.split("=", 1)
+            key = key.strip()
+            val = val.strip().strip('"').strip("'")
+            if not val:
+                continue
+            if val.startswith("b64:") and key == "COUCHDB_PASSWORD":
+                try:
+                    val = base64.b64decode(val[4:]).decode()
+                except Exception:
+                    pass
+            values[key] = val
+        return values
+
+    def save(self, values: dict[str, str]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        password = values.get("COUCHDB_PASSWORD", "")
+        if password:
+            encoded = base64.b64encode(password.encode()).decode()
+            values = {**values, "COUCHDB_PASSWORD": f"b64:{encoded}"}
+        lines = [
+            "# Obsidian LiveSync - CouchDB Credentials",
+            "# KEEP THIS FILE SECURE!",
+        ]
+        for k, v in values.items():
+            lines.append(f"{k}={v}")
+        self.path.write_text("\n".join(lines) + "\n")
+        self.path.chmod(0o600)
+
+
+_backend: CredentialBackend = FileBackend()
+
+
+def set_backend(backend: CredentialBackend) -> None:
+    """Replace the credential backend (e.g. Infisical, keyring)."""
+    global _backend
+    _backend = backend
 
 
 class Credentials:
@@ -29,20 +101,7 @@ class Credentials:
 
     @classmethod
     def load(cls) -> "Credentials":
-        """Load credentials from the credentials file."""
-        if not CREDS_FILE.exists():
-            return cls()
-        values: dict[str, str] = {}
-        for line in CREDS_FILE.read_text().splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "=" in line:
-                key, val = line.split("=", 1)
-                key = key.strip()
-                val = val.strip().strip('"').strip("'")
-                if val:
-                    values[key] = val
+        values = _backend.load()
         return cls(
             couchdb_user=values.get("COUCHDB_USER", ""),
             couchdb_password=values.get("COUCHDB_PASSWORD", ""),
@@ -51,21 +110,14 @@ class Credentials:
         )
 
     def save(self) -> None:
-        """Write credentials to file."""
-        CREDS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        content = (
-            "# Obsidian LiveSync - CouchDB Credentials\n"
-            "# KEEP THIS FILE SECURE!\n"
-            f"COUCHDB_USER={self.couchdb_user}\n"
-            f"COUCHDB_PASSWORD={self.couchdb_password}\n"
-            f"DATABASE_NAME={self.database_name}\n"
-            f"COUCHDB_PORT={self.couchdb_port}\n"
-        )
-        CREDS_FILE.write_text(content)
-        CREDS_FILE.chmod(0o600)
+        _backend.save({
+            "COUCHDB_USER": self.couchdb_user,
+            "COUCHDB_PASSWORD": self.couchdb_password,
+            "DATABASE_NAME": self.database_name,
+            "COUCHDB_PORT": str(self.couchdb_port),
+        })
 
     def get_env_exports(self) -> str:
-        """Return shell exports for use in subprocess."""
         return (
             f"export COUCHDB_USER='{self.couchdb_user}'\n"
             f"export COUCHDB_PASSWORD='{self.couchdb_password}'\n"

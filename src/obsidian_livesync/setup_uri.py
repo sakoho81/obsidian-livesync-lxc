@@ -1,25 +1,99 @@
-"""Setup URI generation via Deno."""
+"""Setup URI generation — native Python, no Deno required."""
 
 from __future__ import annotations
 
-import subprocess
-from pathlib import Path
+import base64
+import hashlib
+import os
+import secrets
+from urllib.parse import quote
 
-UTILS_DIR = Path(__file__).resolve().parent.parent.parent / "utils"
-SETUP_URI_TS = UTILS_DIR / "generate_setupuri.ts"
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives.hashes import SHA256, Hash
+
+NOUNS = [
+    "waterfall", "river", "breeze", "moon", "rain", "wind", "sea",
+    "morning", "snow", "lake", "sunset", "pine", "shadow", "leaf",
+    "dawn", "glitter", "forest", "hill", "cloud", "meadow", "sun",
+    "glade", "bird", "brook", "butterfly", "bush", "dew", "dust",
+    "field", "fire", "flower", "firefly", "feather", "grass", "haze",
+    "mountain", "night", "pond", "darkness", "snowflake", "silence",
+    "sound", "sky", "shape", "surf", "thunder", "violet", "water",
+    "wildflower", "wave", "resonance", "log", "dream", "cherry",
+    "tree", "fog", "frost", "voice", "paper", "frog", "smoke", "star",
+]
+
+ADJECTIVES = [
+    "autumn", "hidden", "bitter", "misty", "silent", "empty", "dry",
+    "dark", "summer", "icy", "delicate", "quiet", "white", "cool",
+    "spring", "winter", "patient", "twilight", "dawn", "crimson",
+    "wispy", "weathered", "blue", "billowing", "broken", "cold",
+    "damp", "falling", "frosty", "green", "long", "late", "lingering",
+    "bold", "little", "morning", "muddy", "old", "red", "rough",
+    "still", "small", "sparkling", "thrumming", "shy", "wandering",
+    "withered", "wild", "black", "young", "holy", "solitary",
+    "fragrant", "aged", "snowy", "proud", "floral", "restless",
+    "divine", "polished", "ancient", "purple", "lively", "nameless",
+]
 
 
-def _find_deno() -> str | None:
-    """Find Deno binary, or return None."""
-    for name in ("deno",):
-        result = subprocess.run(
-            ["which", name],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode == 0:
-            return result.stdout.strip()
-    return None
+def _friendly_passphrase() -> str:
+    return f"{secrets.choice(ADJECTIVES)}-{secrets.choice(NOUNS)}"
+
+
+_SETUP_CONF_DEFAULTS = {
+    "syncOnStart": True,
+    "gcDelay": 0,
+    "periodicReplication": True,
+    "syncOnFileOpen": True,
+    "encrypt": True,
+    "usePathObfuscation": True,
+    "batchSave": True,
+    "batch_size": 50,
+    "batches_limit": 50,
+    "useHistory": True,
+    "disableRequestURI": True,
+    "customChunkSize": 50,
+    "syncAfterMerge": False,
+    "concurrencyOfReadChunksOnline": 100,
+    "minimumIntervalOfReadChunksOnline": 100,
+    "handleFilenameCaseSensitive": False,
+    "doNotUseFixedRevisionForChunks": False,
+    "settingVersion": 10,
+    "notifyThresholdOfRemoteStorageSize": 800,
+}
+
+
+def _encrypt(plaintext: str, passphrase: str) -> str:
+    """Encrypt config JSON in octagonal-wheels format.
+
+    Format: %<iv_hex_32chars><salt_hex_32chars><base64_ciphertext>
+
+    Key derivation: SHA256(passphrase) → PBKDF2-HMAC-SHA256(100000) → AES-256-GCM.
+    """
+    iterations = 100000
+
+    digest = Hash(SHA256())
+    digest.update(passphrase.encode("utf-8"))
+    key_material = digest.finalize()
+
+    salt = os.urandom(16)
+
+    kdf = PBKDF2HMAC(
+        algorithm=SHA256(),
+        length=32,
+        salt=salt,
+        iterations=iterations,
+    )
+    key = kdf.derive(key_material)
+
+    iv = os.urandom(16)
+
+    aesgcm = AESGCM(key)
+    ciphertext = aesgcm.encrypt(iv, plaintext.encode("utf-8"), None)
+
+    return f"%{iv.hex()}{salt.hex()}{base64.b64encode(ciphertext).decode()}"
 
 
 def generate_setup_uri(
@@ -29,57 +103,23 @@ def generate_setup_uri(
     password: str,
     passphrase: str = "",
 ) -> tuple[str, str]:
-    """Generate a setup URI using the bundled Deno script.
+    """Generate an obsidian://setuplivesync URI.
 
     Returns (setup_uri, uri_passphrase).
     """
-    deno = _find_deno()
-    if deno is None:
-        raise RuntimeError(
-            "Deno is not installed. Install it: curl -fsSL https://deno.land/install.sh | sh"
-        )
+    uri_passphrase = passphrase or _friendly_passphrase()
 
-    script_path = SETUP_URI_TS if SETUP_URI_TS.exists() else None
-    if script_path is None:
-        # Fallback to upstream URL
-        script_path = "https://raw.githubusercontent.com/vrtmrz/obsidian-livesync/main/utils/flyio/generate_setupuri.ts"
-
-    env = {
-        **__import__("os").environ,
-        "hostname": hostname,
-        "database": database,
-        "username": username,
-        "password": password,
+    conf = {
+        **_SETUP_CONF_DEFAULTS,
+        "couchDB_URI": hostname,
+        "couchDB_USER": username,
+        "couchDB_PASSWORD": password,
+        "couchDB_DBNAME": database,
         "passphrase": passphrase,
     }
 
-    result = subprocess.run(
-        [deno, "run", "-A", str(script_path)],
-        capture_output=True,
-        text=True,
-        env=env,
-    )
+    import json
 
-    if result.returncode != 0:
-        raise RuntimeError(f"Setup URI generation failed: {result.stderr}")
-
-    output = result.stdout + result.stderr
-
-    # Parse the Deno output to find the URI and passphrase
-    setup_uri = ""
-    uri_passphrase = ""
-    for line in output.splitlines():
-        if line.startswith("obsidian://setuplivesync"):
-            setup_uri = line.strip()
-        elif "passphrase of Setup-URI is:" in line:
-            uri_passphrase = line.split("is:", 1)[1].strip()
-
-    if not setup_uri:
-        # The URI might be the last non-empty line
-        lines = [l.strip() for l in output.splitlines() if l.strip()]
-        for line in reversed(lines):
-            if line.startswith("obsidian://"):
-                setup_uri = line
-                break
-
-    return setup_uri, uri_passphrase
+    encrypted = _encrypt(json.dumps(conf), uri_passphrase)
+    uri = f"obsidian://setuplivesync?settings={quote(encrypted)}"
+    return uri, uri_passphrase

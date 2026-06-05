@@ -1,10 +1,12 @@
 """Tests for CLI commands."""
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from typer.testing import CliRunner
 
 from obsidian_livesync.cli import app
+from obsidian_livesync.config import FileBackend, set_backend
 
 runner = CliRunner()
 
@@ -33,10 +35,7 @@ def test_setup_uri_help():
 
 
 def test_db_create_missing_password_prompts(monkeypatch):
-    monkeypatch.setattr(
-        "obsidian_livesync.config.CREDS_FILE",
-        __import__("pathlib").Path("/nonexistent"),
-    )
+    set_backend(FileBackend(Path("/nonexistent")))
     prompts = []
 
     def fake_prompt(*a, **kw):
@@ -53,10 +52,7 @@ def test_db_create_missing_password_prompts(monkeypatch):
 
 
 def test_db_list_falls_back_to_prompt(monkeypatch):
-    monkeypatch.setattr(
-        "obsidian_livesync.config.CREDS_FILE",
-        __import__("pathlib").Path("/nonexistent"),
-    )
+    set_backend(FileBackend(Path("/nonexistent")))
     monkeypatch.setattr(
         "obsidian_livesync.cli.console",
             MagicMock(),
@@ -80,10 +76,7 @@ def test_db_list_falls_back_to_prompt(monkeypatch):
 
 
 def test_db_delete_no_force_aborts(monkeypatch):
-    monkeypatch.setattr(
-        "obsidian_livesync.config.CREDS_FILE",
-        __import__("pathlib").Path("/nonexistent"),
-    )
+    set_backend(FileBackend(Path("/nonexistent")))
     monkeypatch.setattr(
         "obsidian_livesync.cli.delete_database",
         lambda *a, **kw: True,
@@ -99,10 +92,7 @@ def test_db_delete_no_force_aborts(monkeypatch):
 
 
 def test_db_delete_force(monkeypatch):
-    monkeypatch.setattr(
-        "obsidian_livesync.config.CREDS_FILE",
-        __import__("pathlib").Path("/nonexistent"),
-    )
+    set_backend(FileBackend(Path("/nonexistent")))
     monkeypatch.setattr(
         "obsidian_livesync.cli.delete_database",
         lambda *a, **kw: True,
@@ -118,10 +108,7 @@ def test_db_delete_force(monkeypatch):
 
 
 def test_check_missing_connection(monkeypatch):
-    monkeypatch.setattr(
-        "obsidian_livesync.config.CREDS_FILE",
-        __import__("pathlib").Path("/nonexistent"),
-    )
+    set_backend(FileBackend(Path("/nonexistent")))
 
     def fake_prompt(*a, **kw):
         return "test"

@@ -103,19 +103,27 @@ if [[ -n "$BRIDGE_NUM" ]]; then
 fi
 BRIDGE=${BRIDGE:-$DEFAULT_BRIDGE}
 
+# Network — static IP by default, last octet = container ID
+echo ""
+HOST_IP=$(hostname -I | awk '{print $1}')
+HOST_PREFIX="${HOST_IP%.*}."
+
 echo ""
 echo "IP Configuration:"
-echo "1) DHCP (recommended)"
-echo "2) Static IP"
+echo "1) Static IP — ${HOST_PREFIX}${CT_ID} (recommended)"
+echo "2) DHCP"
 read -p "Select [1]: " IP_CONFIG
 IP_CONFIG=${IP_CONFIG:-1}
 
 if [[ "$IP_CONFIG" == "2" ]]; then
-    read -p "IP Address (e.g., 192.168.1.100/24): " STATIC_IP
-    read -p "Gateway (e.g., 192.168.1.1): " GATEWAY
-    NET_CONFIG="name=eth0,bridge=${BRIDGE},ip=${STATIC_IP},gw=${GATEWAY}"
-else
     NET_CONFIG="name=eth0,bridge=${BRIDGE},ip=dhcp"
+else
+    DEFAULT_STATIC_IP="${HOST_PREFIX}${CT_ID}/24"
+    read -p "IP Address [${DEFAULT_STATIC_IP}]: " STATIC_IP
+    STATIC_IP=${STATIC_IP:-$DEFAULT_STATIC_IP}
+    read -p "Gateway [$(ip route | grep default | awk '{print $3}')]: " GATEWAY
+    GATEWAY=${GATEWAY:-$(ip route | grep default | awk '{print $3}')}
+    NET_CONFIG="name=eth0,bridge=${BRIDGE},ip=${STATIC_IP},gw=${GATEWAY}"
 fi
 
 # CouchDB credentials

@@ -86,18 +86,13 @@ def setup_uri(
     passphrase: str = typer.Option("", "--passphrase", help="E2E encryption passphrase (empty = auto-generate URI passphrase)"),
 ):
     """Generate an obsidian://setuplivesync setup URI."""
-    try:
-        uri, uri_passphrase = generate_setup_uri(
-            hostname=hostname,
-            database=database,
-            username=username,
-            password=password,
-            passphrase=passphrase,
-        )
-    except RuntimeError as e:
-        console.print(f"[red]{e}[/red]")
-        console.print("[dim]Install Deno: curl -fsSL https://deno.land/install.sh | sh[/dim]")
-        raise typer.Exit(1)
+    uri, uri_passphrase = generate_setup_uri(
+        hostname=hostname,
+        database=database,
+        username=username,
+        password=password,
+        passphrase=passphrase,
+    )
 
     if uri_passphrase:
         console.print(f"[bold yellow]Setup URI passphrase:[/bold yellow] {uri_passphrase}")
