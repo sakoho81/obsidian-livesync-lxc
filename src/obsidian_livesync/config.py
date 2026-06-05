@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 from pathlib import Path
 from typing import Protocol
 
@@ -46,10 +47,8 @@ class FileBackend:
             if not val:
                 continue
             if val.startswith("b64:") and key == "COUCHDB_PASSWORD":
-                try:
+                with contextlib.suppress(Exception):
                     val = base64.b64decode(val[4:]).decode()
-                except Exception:
-                    pass
             values[key] = val
         return values
 
@@ -100,7 +99,7 @@ class Credentials:
         return f"http://{self.couchdb_user}:{self.couchdb_password}@127.0.0.1:{self.couchdb_port}"
 
     @classmethod
-    def load(cls) -> "Credentials":
+    def load(cls) -> Credentials:
         values = _backend.load()
         return cls(
             couchdb_user=values.get("COUCHDB_USER", ""),
@@ -110,12 +109,14 @@ class Credentials:
         )
 
     def save(self) -> None:
-        _backend.save({
-            "COUCHDB_USER": self.couchdb_user,
-            "COUCHDB_PASSWORD": self.couchdb_password,
-            "DATABASE_NAME": self.database_name,
-            "COUCHDB_PORT": str(self.couchdb_port),
-        })
+        _backend.save(
+            {
+                "COUCHDB_USER": self.couchdb_user,
+                "COUCHDB_PASSWORD": self.couchdb_password,
+                "DATABASE_NAME": self.database_name,
+                "COUCHDB_PORT": str(self.couchdb_port),
+            }
+        )
 
     def get_env_exports(self) -> str:
         return (

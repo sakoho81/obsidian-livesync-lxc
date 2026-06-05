@@ -1,7 +1,5 @@
 """Tests for credentials management."""
 
-from pathlib import Path
-
 from obsidian_livesync.config import (
     Credentials,
     FileBackend,

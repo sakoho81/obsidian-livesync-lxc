@@ -3,8 +3,8 @@
 import pytest
 from pytest_httpx import HTTPXMock
 
-from obsidian_livesync.config import Credentials
 from obsidian_livesync import couchdb as cd
+from obsidian_livesync.config import Credentials
 
 
 @pytest.fixture
@@ -60,15 +60,16 @@ def test_configure_livesync_makes_correct_requests(creds, httpx_mock: HTTPXMock)
 
     requests = httpx_mock.get_requests()
     urls = {str(r.url) for r in requests}
-    assert "http://admin:pass@127.0.0.1:5984/_node/_local/_config/chttpd/require_valid_user" in urls
-    assert "http://admin:pass@127.0.0.1:5984/_node/_local/_config/chttpd/enable_cors" in urls
-    assert "http://admin:pass@127.0.0.1:5984/_node/_local/_config/chttpd/max_http_request_size" in urls
-    assert "http://admin:pass@127.0.0.1:5984/_node/_local/_config/chttpd_auth/require_valid_user" in urls
-    assert "http://admin:pass@127.0.0.1:5984/_node/_local/_config/httpd/WWW-Authenticate" in urls
-    assert "http://admin:pass@127.0.0.1:5984/_node/_local/_config/httpd/enable_cors" in urls
-    assert "http://admin:pass@127.0.0.1:5984/_node/_local/_config/couchdb/max_document_size" in urls
-    assert "http://admin:pass@127.0.0.1:5984/_node/_local/_config/cors/credentials" in urls
-    assert "http://admin:pass@127.0.0.1:5984/_node/_local/_config/cors/origins" in urls
+    base = "http://admin:pass@127.0.0.1:5984/_node/_local/_config"
+    assert f"{base}/chttpd/require_valid_user" in urls
+    assert f"{base}/chttpd/enable_cors" in urls
+    assert f"{base}/chttpd/max_http_request_size" in urls
+    assert f"{base}/chttpd_auth/require_valid_user" in urls
+    assert f"{base}/httpd/WWW-Authenticate" in urls
+    assert f"{base}/httpd/enable_cors" in urls
+    assert f"{base}/couchdb/max_document_size" in urls
+    assert f"{base}/cors/credentials" in urls
+    assert f"{base}/cors/origins" in urls
     assert len(requests) == 9
 
 

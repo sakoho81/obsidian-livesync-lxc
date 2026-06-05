@@ -55,7 +55,7 @@ def test_db_list_falls_back_to_prompt(monkeypatch):
     set_backend(FileBackend(Path("/nonexistent")))
     monkeypatch.setattr(
         "obsidian_livesync.cli.console",
-            MagicMock(),
+        MagicMock(),
     )
 
     prompts = []

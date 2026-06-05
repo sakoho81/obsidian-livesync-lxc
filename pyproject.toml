@@ -30,7 +30,17 @@ dev = [
     "pytest>=8",
     "pytest-httpx>=0.35",
     "pytest-mock>=3.14",
+    "ruff>=0.11",
 ]
+
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

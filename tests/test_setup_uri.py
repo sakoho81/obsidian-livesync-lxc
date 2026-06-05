@@ -74,6 +74,7 @@ def test_generate_setup_uri_format_contains_percent_prefix():
     settings = uri.split("settings=", 1)[1]
     # URL-decode it
     from urllib.parse import unquote
+
     decoded = unquote(settings)
     # Format: %<hex_iv_32><hex_salt_32><base64>
     assert len(decoded) > 65

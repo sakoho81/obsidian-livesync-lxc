@@ -55,7 +55,7 @@ def install():
         if not wait_for_couchdb(creds):
             console.print("[red]CouchDB did not become ready.[/red]")
             raise typer.Exit(1)
-        configure_livesync(creds)
+    configure_livesync(creds)
     console.print("[green]LiveSync configuration applied.[/green]")
 
     with console.status("[bold green]Creating database...[/bold green]"):
@@ -67,23 +67,39 @@ def install():
 
     ip = get_server_ip()
     console.print("\n")
-    console.print(Panel(
-        f"CouchDB Admin: http://{ip}:5984/_utils\n"
-        f"LiveSync URI:  http://{ip}:5984\n"
-        f"Username:      {creds.couchdb_user}\n"
-        f"Database:      {creds.database_name}",
-        title="Installation Complete",
-        border_style="green",
-    ))
+    console.print(
+        Panel(
+            f"CouchDB Admin: http://{ip}:5984/_utils\n"
+            f"LiveSync URI:  http://{ip}:5984\n"
+            f"Username:      {creds.couchdb_user}\n"
+            f"Database:      {creds.database_name}",
+            title="Installation Complete",
+            border_style="green",
+        )
+    )
 
 
 @app.command()
 def setup_uri(
-    hostname: str = typer.Option(..., "--hostname", help="CouchDB server URL (e.g., http://192.168.1.100:5984)"),
-    database: str = typer.Option(..., "--database", "--db", help="CouchDB database name"),
-    username: str = typer.Option(..., "--username", "-u", help="CouchDB admin username"),
-    password: str = typer.Option(..., "--password", "-p", help="CouchDB admin password"),
-    passphrase: str = typer.Option("", "--passphrase", help="E2E encryption passphrase (empty = auto-generate URI passphrase)"),
+    hostname: str = typer.Option(
+        ...,
+        "--hostname",
+        help="CouchDB server URL (e.g., http://192.168.1.100:5984)",
+    ),
+    database: str = typer.Option(
+        ..., "--database", "--db", help="CouchDB database name"
+    ),
+    username: str = typer.Option(
+        ..., "--username", "-u", help="CouchDB admin username"
+    ),
+    password: str = typer.Option(
+        ..., "--password", "-p", help="CouchDB admin password"
+    ),
+    passphrase: str = typer.Option(
+        "",
+        "--passphrase",
+        help="E2E encryption passphrase (empty = auto-generate URI passphrase)",
+    ),
 ):
     """Generate an obsidian://setuplivesync setup URI."""
     uri, uri_passphrase = generate_setup_uri(
@@ -95,8 +111,13 @@ def setup_uri(
     )
 
     if uri_passphrase:
-        console.print(f"[bold yellow]Setup URI passphrase:[/bold yellow] {uri_passphrase}")
-        console.print("[dim]Save this passphrase! You'll need it to import the URI on new devices.[/dim]")
+        console.print(
+            f"[bold yellow]Setup URI passphrase:[/bold yellow] {uri_passphrase}"
+        )
+        console.print(
+            "[dim]Save this passphrase! You'll need it"
+            " to import the URI on new devices.[/dim]"
+        )
     console.print(f"\n[green]{uri}[/green]")
 
 
@@ -133,7 +154,7 @@ def db_list():
         dbs = list_databases(creds)
     except Exception as e:
         console.print(f"[red]Failed to list databases: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
     table = Table(title="CouchDB Databases")
     table.add_column("Name", style="cyan")
@@ -178,9 +199,14 @@ def check():
         config = check_config(creds)
     except Exception as e:
         console.print(f"[red]Cannot connect to CouchDB: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
-    console.print(Panel(f"Connected to CouchDB at {creds.couchdb_url}", border_style="green"))
+    console.print(
+        Panel(
+            f"Connected to CouchDB at {creds.couchdb_url}",
+            border_style="green",
+        )
+    )
 
     required = {
         ("chttpd", "require_valid_user"): "true",
@@ -216,4 +242,7 @@ def check():
     if all_ok:
         console.print("\n[green]All settings correct![/green]")
     else:
-        console.print("\n[yellow]Some settings need fixing. Re-run the installer or adjust CouchDB config manually.[/yellow]")
+        console.print(
+            "\n[yellow]Some settings need fixing."
+            " Re-run the installer or adjust CouchDB config manually.[/yellow]"
+        )

@@ -1,4 +1,9 @@
-"""CouchDB operations: install, configure, database management."""
+# ruff: noqa: E501
+
+"""CouchDB operations: install, configure, database management.
+
+This module generates bash scripts with long lines — E501 is expected.
+"""
 
 import subprocess
 import time
@@ -11,10 +16,12 @@ COUCHDB_PORT = 5984
 
 
 def _couch_url(creds: Credentials) -> str:
-    return f"http://{creds.couchdb_user}:{creds.couchdb_password}@127.0.0.1:{COUCHDB_PORT}"
+    return (
+        f"http://{creds.couchdb_user}:{creds.couchdb_password}@127.0.0.1:{COUCHDB_PORT}"
+    )
 
 
-def generate_install_script(creds: Credentials) -> str:
+def generate_install_script(creds: Credentials) -> str:  # noqa: E501
     """Generate a bash install script for CouchDB."""
     return f"""#!/bin/bash
 set -e
@@ -103,7 +110,10 @@ def configure_livesync(creds: Credentials) -> None:
 
 
 def create_database(creds: Credentials, db_name: str | None = None) -> bool:
-    """Create a CouchDB database. Returns True if created (201) or already exists (412)."""
+    """Create a CouchDB database.
+
+    Returns True if created (201) or already exists (412).
+    """
     name = db_name or creds.database_name
     r = httpx.put(
         f"{_couch_url(creds)}/{name}",
