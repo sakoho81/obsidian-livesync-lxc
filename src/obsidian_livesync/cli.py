@@ -2,19 +2,12 @@
 
 from __future__ import annotations
 
-import subprocess
-import textwrap
-from pathlib import Path
-from typing import Optional
-
 import typer
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 
 from obsidian_livesync.config import Credentials
-from obsidian_livesync.container import ContainerManager, connect_proxmox
 from obsidian_livesync.couchdb import (
     check_config,
     configure_livesync,
@@ -27,292 +20,61 @@ from obsidian_livesync.couchdb import (
 )
 from obsidian_livesync.setup_uri import generate_setup_uri
 
-app = typer.Typer(help="Obsidian LiveSync LXC manager for Proxmox")
+app = typer.Typer(help="Obsidian LiveSync server manager")
 console = Console()
 
 
-def _creds_from_container(ct_id: int) -> Credentials | None:
-    """Attempt to read credentials from a container."""
-    try:
-        result = subprocess.run(
-            ["pct", "exec", str(ct_id), "--", "cat", "/root/.obsidian-livesync-credentials"],
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            return None
-        values: dict[str, str] = {}
-        for line in result.stdout.splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "=" in line:
-                k, v = line.split("=", 1)
-                values[k.strip()] = v.strip().strip('"').strip("'")
-        if values:
-            return Credentials(
-                couchdb_user=values.get("COUCHDB_USER", ""),
-                couchdb_password=values.get("COUCHDB_PASSWORD", ""),
-                database_name=values.get("DATABASE_NAME", "obsidian"),
-                couchdb_port=int(values.get("COUCHDB_PORT", "5984")),
-            )
-    except Exception:
-        pass
-    return None
-
-
-def _get_creds(ct_id: int | None) -> Credentials:
-    """Get credentials from container or local file."""
-    if ct_id is not None:
-        creds = _creds_from_container(ct_id)
-        if creds and creds.couchdb_user:
-            return creds
+def _get_creds() -> Credentials:
+    """Get credentials from local file."""
     return Credentials.load()
 
 
 @app.command()
-def create(
-    ct_id: int = typer.Option(None, "--ct-id", "-c", help="Container ID (auto-detected if omitted)", min=100),
-    hostname: str = typer.Option("obsidian-livesync", "--hostname", "-n", help="Container hostname"),
-    disk: int = typer.Option(4, "--disk", "-d", help="Disk size in GB"),
-    ram: int = typer.Option(512, "--ram", "-m", help="RAM in MB"),
-    cores: int = typer.Option(1, "--cores", help="CPU cores"),
-    storage: Optional[str] = typer.Option(None, "--storage", "-s", help="Storage pool for the container"),
-    bridge: Optional[str] = typer.Option(None, "--bridge", "-b", help="Network bridge"),
-    dhcp: bool = typer.Option(True, "--dhcp/--static", help="Use DHCP (default) or static IP"),
-    static_ip: Optional[str] = typer.Option(None, "--ip", help="Static IP with CIDR (e.g., 192.168.1.100/24)"),
-    gateway: Optional[str] = typer.Option(None, "--gateway", "-g", help="Gateway IP for static config"),
-    couchdb_user: str = typer.Option("admin", "--couchdb-user", help="CouchDB admin username"),
-    couchdb_password: Optional[str] = typer.Option(None, "--couchdb-password", help="CouchDB admin password"),
-    database: str = typer.Option("obsidian", "--database", "--db", help="Database name for Obsidian"),
-    root_password: Optional[str] = typer.Option(None, "--root-password", help="Container root password"),
-    proxmox_password: Optional[str] = typer.Option(None, "--proxmox-password", help="Proxmox root password"),
-    proxmox_host: str = typer.Option("localhost", "--proxmox-host", help="Proxmox host address"),
-    template_storage: str = typer.Option("local", "--template-storage", help="Storage for templates"),
-    no_setup_uri: bool = typer.Option(False, "--no-setup-uri", help="Skip setup URI generation"),
-):
-    """Create a new Obsidian LiveSync LXC container on Proxmox."""
+def install():
+    """Install and configure CouchDB for Obsidian LiveSync on this machine."""
+    creds = _get_creds()
+    if not creds.couchdb_password:
+        creds.couchdb_user = typer.prompt("CouchDB username", default="admin")
+        creds.couchdb_password = typer.prompt("CouchDB password", hide_input=True)
+        creds.database_name = typer.prompt("Database name", default="obsidian")
 
-    # --- Proxmox auth ---
-    if proxmox_password is None:
-        proxmox_password = typer.prompt(
-            "Proxmox root password",
-            hide_input=True,
+    with console.status("[bold green]Installing CouchDB...[/bold green]"):
+        import subprocess
+
+        result = subprocess.run(
+            ["bash", "-c", generate_install_script(creds)],
+            capture_output=True,
+            text=True,
         )
-    try:
-        proxmox, node = connect_proxmox(host=proxmox_host, password=proxmox_password)
-    except Exception as e:
-        console.print(f"[red]Failed to connect to Proxmox: {e}[/red]")
-        raise typer.Exit(1)
-
-    mgr = ContainerManager(proxmox, node)
-
-    # --- Container ID ---
-    if ct_id is None:
-        ct_id = mgr.get_next_ct_id()
-        console.print(f"[dim]Auto-detected next free Container ID: {ct_id}[/dim]")
-
-    # --- Template selection ---
-    templates = mgr.list_templates()
-    if not templates:
-        console.print("[red]No Debian templates found. Run 'pveam update' first.[/red]")
-        raise typer.Exit(1)
-
-    default_template = templates[0]["template"]
-    console.print("\n[bold]Available Debian templates:[/bold]")
-    for i, t in enumerate(templates, 1):
-        console.print(f"  {i}) {t['template']}")
-    choice = typer.prompt("Select template number", default="1")
-    try:
-        selected = templates[int(choice) - 1]["template"]
-    except (IndexError, ValueError):
-        selected = default_template
-    console.print(f"[dim]Selected: {selected}[/dim]")
-
-    mgr.download_template(template_storage, selected)
-    ostemplate = f"{template_storage}:vztmpl/{selected}"
-
-    # --- Storage ---
-    if storage is None:
-        storages = mgr.list_storage("rootdir")
-        if not storages:
-            console.print("[red]No storage available for containers.[/red]")
-            raise typer.Exit(1)
-        default_storage = "local-lvm" if "local-lvm" in storages else storages[0]
-        console.print("\n[bold]Available storage:[/bold]")
-        for i, s in enumerate(storages, 1):
-            console.print(f"  {i}) {s}")
-        choice = typer.prompt("Select storage number", default="1")
-        try:
-            storage = storages[int(choice) - 1]
-        except (IndexError, ValueError):
-            storage = default_storage
-        console.print(f"[dim]Selected: {storage}[/dim]")
-
-    # --- Network ---
-    if bridge is None:
-        bridges = mgr.list_bridges()
-        if not bridges:
-            console.print("[red]No network bridges found.[/red]")
-            raise typer.Exit(1)
-        default_bridge = "vmbr0" if "vmbr0" in bridges else bridges[0]
-        console.print("\n[bold]Available bridges:[/bold]")
-        for i, b in enumerate(bridges, 1):
-            console.print(f"  {i}) {b}")
-        choice = typer.prompt("Select bridge number", default="1")
-        try:
-            bridge = bridges[int(choice) - 1]
-        except (IndexError, ValueError):
-            bridge = default_bridge
-        console.print(f"[dim]Selected: {bridge}[/dim]")
-
-    if not dhcp:
-        if static_ip is None:
-            static_ip = typer.prompt("IP Address (e.g., 192.168.1.100/24)")
-        if gateway is None:
-            gateway = typer.prompt("Gateway (e.g., 192.168.1.1)")
-        net_config = f"name=eth0,bridge={bridge},ip={static_ip},gw={gateway}"
-    else:
-        net_config = f"name=eth0,bridge={bridge},ip=dhcp"
-
-    # --- Credentials ---
-    if root_password is None:
-        root_password = typer.prompt(
-            "Container root password",
-            hide_input=True,
-            confirmation_prompt=True,
-        )
-    if couchdb_password is None:
-        couchdb_password = typer.prompt(
-            "CouchDB admin password",
-            hide_input=True,
-            confirmation_prompt=True,
-        )
-
-    creds = Credentials(
-        couchdb_user=couchdb_user,
-        couchdb_password=couchdb_password,
-        database_name=database,
-    )
-
-    # --- Confirmation ---
-    console.print("\n")
-    console.print(Panel.fit(
-        f"Container ID: {ct_id}\n"
-        f"Hostname: {hostname}\n"
-        f"Disk: {disk}GB  RAM: {ram}MB  CPU: {cores} core(s)\n"
-        f"Storage: {storage}  Bridge: {bridge}\n"
-        f"Network: {'DHCP' if dhcp else f'{static_ip} via {gateway}'}\n"
-        f"CouchDB user: {couchdb_user}\n"
-        f"Database: {database}",
-        title="Configuration Summary",
-        border_style="cyan",
-    ))
-    confirm = typer.confirm("Create container with these settings?")
-    if not confirm:
-        console.print("[yellow]Aborted.[/yellow]")
-        raise typer.Exit(0)
-
-    # --- Create container ---
-    with console.status("[bold green]Creating container...[/bold green]"):
-        mgr.create_container(
-            vmid=ct_id,
-            hostname=hostname,
-            root_password=root_password,
-            template=ostemplate,
-            storage=storage,
-            disk=disk,
-            ram=ram,
-            cores=cores,
-            net_config=net_config,
-        )
-    console.print(f"[green]Container {ct_id} created.[/green]")
-
-    # --- Start container ---
-    with console.status("[bold green]Starting container...[/bold green]"):
-        mgr.start_container(ct_id)
-    container_ip = mgr.get_container_ip(ct_id)
-    console.print(f"[green]Container {ct_id} started. IP: {container_ip}[/green]")
-
-    # --- Install CouchDB ---
-    with console.status("[bold green]Installing CouchDB in container...[/bold green]"):
-        script = generate_install_script(creds)
-        script_path = Path("/tmp/obsidian-livesync-install.sh")
-        script_path.write_text(script)
-        script_path.chmod(0o755)
-        mgr.push_file(ct_id, script_path, "/tmp/install-couchdb.sh")
-        result = mgr.exec_in_container(ct_id, "bash /tmp/install-couchdb.sh")
         if result.returncode != 0:
-            console.print(f"[red]CouchDB install failed:[/red]\n{result.stderr}")
+            console.print(f"[red]Install failed:[/red]\n{result.stderr}")
             raise typer.Exit(1)
-        script_path.unlink()
     console.print("[green]CouchDB installed.[/green]")
 
-    # --- Configure CouchDB ---
     with console.status("[bold green]Configuring CouchDB for LiveSync...[/bold green]"):
         if not wait_for_couchdb(creds):
-            console.print("[red]CouchDB did not become ready in time.[/red]")
+            console.print("[red]CouchDB did not become ready.[/red]")
             raise typer.Exit(1)
         configure_livesync(creds)
     console.print("[green]LiveSync configuration applied.[/green]")
 
-    # --- Create database ---
     with console.status("[bold green]Creating database...[/bold green]"):
         create_database(creds)
     console.print(f"[green]Database '{creds.database_name}' ready.[/green]")
 
-    # --- Save credentials inside container ---
-    mgr.exec_in_container(
-        ct_id,
-        f"mkdir -p /root && cat > /root/.obsidian-livesync-credentials << 'EOF'\n"
-        f"COUCHDB_USER={creds.couchdb_user}\n"
-        f"COUCHDB_PASSWORD={creds.couchdb_password}\n"
-        f"DATABASE_NAME={creds.database_name}\n"
-        f"COUCHDB_PORT=5984\n"
-        f"EOF\nchmod 600 /root/.obsidian-livesync-credentials",
-    )
+    creds.save()
+    console.print(f"[dim]Credentials saved to {creds.couchdb_url}[/dim]")
 
-    # --- Success ---
+    ip = get_server_ip()
     console.print("\n")
     console.print(Panel(
-        Text.assemble(
-            ("Container Details:\n", "bold cyan"),
-            (f"ID:       {ct_id}\n", ""),
-            (f"Hostname: {hostname}\n", ""),
-            (f"IP:       {container_ip}\n\n", ""),
-            ("CouchDB Admin:\n", "bold cyan"),
-            (f"URL:      http://{container_ip}:5984/_utils\n\n", ""),
-            ("LiveSync Settings:\n", "bold cyan"),
-            (f"URI:      http://{container_ip}:5984\n", ""),
-            (f"Username: {creds.couchdb_user}\n", ""),
-            (f"Password: (as configured)\n", ""),
-            (f"Database: {creds.database_name}\n", ""),
-        ),
+        f"CouchDB Admin: http://{ip}:5984/_utils\n"
+        f"LiveSync URI:  http://{ip}:5984\n"
+        f"Username:      {creds.couchdb_user}\n"
+        f"Database:      {creds.database_name}",
         title="Installation Complete",
         border_style="green",
     ))
-
-    # --- Setup URI hint ---
-    if not no_setup_uri:
-        console.print("\n[bold]Setup URI (for one-click device config):[/bold]")
-        console.print("[dim]Run this from any machine with Deno installed:[/dim]")
-        console.print(
-            Panel(
-                textwrap.dedent(f"""\
-                export hostname="http://{container_ip}:5984"
-                export database="{creds.database_name}"
-                export username="{creds.couchdb_user}"
-                export password="{creds.couchdb_password}"
-                export passphrase=""  # choose your E2E passphrase
-
-                deno run -A \\
-                  https://raw.githubusercontent.com/vrtmrz/obsidian-livesync/main/utils/flyio/generate_setupuri.ts
-                """),
-                border_style="dim",
-            )
-        )
-
-    console.print(f"\n[dim]Access container: pct enter {ct_id}[/dim]\n")
 
 
 @app.command()
@@ -350,10 +112,9 @@ app.add_typer(db_app, name="db")
 @db_app.command("create")
 def db_create(
     name: str = typer.Argument(..., help="Database name"),
-    ct_id: Optional[int] = typer.Option(None, "--ct-id", "-c", help="Container ID (for in-container operations)"),
 ):
     """Create a CouchDB database."""
-    creds = _get_creds(ct_id)
+    creds = _get_creds()
     if not creds.couchdb_password:
         creds.couchdb_user = typer.prompt("CouchDB username", default="admin")
         creds.couchdb_password = typer.prompt("CouchDB password", hide_input=True)
@@ -366,11 +127,9 @@ def db_create(
 
 
 @db_app.command("list")
-def db_list(
-    ct_id: Optional[int] = typer.Option(None, "--ct-id", "-c", help="Container ID (for in-container operations)"),
-):
+def db_list():
     """List all CouchDB databases."""
-    creds = _get_creds(ct_id)
+    creds = _get_creds()
     if not creds.couchdb_password:
         creds.couchdb_user = typer.prompt("CouchDB username", default="admin")
         creds.couchdb_password = typer.prompt("CouchDB password", hide_input=True)
@@ -393,7 +152,6 @@ def db_list(
 def db_delete(
     name: str = typer.Argument(..., help="Database name"),
     force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
-    ct_id: Optional[int] = typer.Option(None, "--ct-id", "-c", help="Container ID"),
 ):
     """Delete a CouchDB database."""
     if not force:
@@ -401,7 +159,7 @@ def db_delete(
         if not confirm:
             console.print("[yellow]Aborted.[/yellow]")
             raise typer.Exit(0)
-    creds = _get_creds(ct_id)
+    creds = _get_creds()
     if not creds.couchdb_password:
         creds.couchdb_user = typer.prompt("CouchDB username", default="admin")
         creds.couchdb_password = typer.prompt("CouchDB password", hide_input=True)
@@ -414,11 +172,9 @@ def db_delete(
 
 
 @app.command()
-def check(
-    ct_id: Optional[int] = typer.Option(None, "--ct-id", "-c", help="Container ID"),
-):
+def check():
     """Check CouchDB configuration for LiveSync compatibility."""
-    creds = _get_creds(ct_id)
+    creds = _get_creds()
     if not creds.couchdb_password:
         creds.couchdb_user = typer.prompt("CouchDB username", default="admin")
         creds.couchdb_password = typer.prompt("CouchDB password", hide_input=True)
@@ -465,4 +221,4 @@ def check(
     if all_ok:
         console.print("\n[green]All settings correct![/green]")
     else:
-        console.print("\n[yellow]Some settings need fixing. Run 'obsidian-livesync create' to reconfigure.[/yellow]")
+        console.print("\n[yellow]Some settings need fixing. Re-run the installer or adjust CouchDB config manually.[/yellow]")

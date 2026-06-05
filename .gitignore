@@ -19,7 +19,6 @@ Thumbs.db
 __pycache__/
 *.pyc
 .venv/
-uv.lock
 dist/
 
 # Editor files

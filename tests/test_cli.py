@@ -2,7 +2,6 @@
 
 from unittest.mock import MagicMock
 
-import pytest
 from typer.testing import CliRunner
 
 from obsidian_livesync.cli import app
@@ -13,7 +12,6 @@ runner = CliRunner()
 def test_cli_help():
     result = runner.invoke(app, ["--help"])
     assert result.exit_code == 0
-    assert "create" in result.stdout
     assert "setup-uri" in result.stdout
     assert "db" in result.stdout
     assert "check" in result.stdout
@@ -27,30 +25,11 @@ def test_db_help():
     assert "delete" in result.stdout
 
 
-def test_create_help():
-    result = runner.invoke(app, ["create", "--help"])
-    assert result.exit_code == 0
-    assert "--ct-id" in result.stdout
-    assert "--hostname" in result.stdout
-    assert "--couchdb-user" in result.stdout
-
-
 def test_setup_uri_help():
     result = runner.invoke(app, ["setup-uri", "--help"])
     assert result.exit_code == 0
     assert "--hostname" in result.stdout
     assert "--database" in result.stdout
-
-
-def test_create_requires_proxmox_pass_or_aborts(monkeypatch):
-    def fake_prompt(*a, **kw):
-        if "Proxmox root password" in str(a):
-            raise RuntimeError("no interactivity in CI")
-        return ""
-
-    monkeypatch.setattr("typer.prompt", fake_prompt)
-    result = runner.invoke(app, ["create", "--proxmox-password", "x"])
-    assert result.exit_code == 1
 
 
 def test_db_create_missing_password_prompts(monkeypatch):
