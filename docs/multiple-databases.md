@@ -17,14 +17,16 @@ Done. No SSH, no Proxmox access needed.
 
 ## Alternative: CLI
 
-From the Proxmox host:
+Inside the container:
 
 ```bash
-pct enter YOUR_CT_ID
-/root/obsidian-livesync/scripts/create-database.sh
+cd /opt/obsidian-livesync
+uv run obsidian-livesync db create WORK_VAULT
+uv run obsidian-livesync db list
+uv run obsidian-livesync db delete OLD_VAULT
 ```
 
-You will be prompted for a database name. CouchDB naming rules: must start with a lowercase letter, and can contain `a-z`, `0-9`, `_`, `$`, `(`, `)`, `+`, `-`, `/`.
+CouchDB naming rules: must start with a lowercase letter, and can contain `a-z`, `0-9`, `_`, `$`, `(`, `)`, `+`, `-`, `/`.
 
 ## Connect a Vault to the New Database
 
@@ -50,6 +52,6 @@ If you already have a working vault configured, you do not need to manually ente
 
 The CouchDB instance uses a single admin account for all databases. Anyone with the admin credentials can access every database through Fauxton.
 
-If different people will use the server, create a **separate LXC container** for each person. Run `obsidian-livesync-lxc.sh` again with a new container ID — each person gets their own CouchDB instance with their own admin username and password.
+If different people will use the server, create a **separate LXC container** for each person. Run `./bootstrap.sh` again with a new container ID — each person gets their own CouchDB instance with their own admin username and password.
 
 Do **not** share the same CouchDB instance between different people — the end-to-end encryption passphrase is the only privacy boundary, and sharing an admin account removes database-level isolation.

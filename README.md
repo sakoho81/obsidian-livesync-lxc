@@ -1,6 +1,6 @@
 # Obsidian LiveSync LXC for Proxmox
 
-One-command deployment of self-hosted Obsidian sync using CouchDB in a Proxmox LXC container.
+Self-hosted Obsidian sync using CouchDB in a Proxmox LXC container.
 
 Sync your Obsidian notes across all devices instantly with end-to-end encryption — completely self-hosted on your own server.
 
@@ -12,22 +12,19 @@ Based on the [Self-hosted LiveSync](https://github.com/vrtmrz/obsidian-livesync)
 - **End-to-end encryption** — your notes stay private
 - **Self-hosted** — no cloud services, your data stays on your server
 - **Lightweight** — runs in a small LXC container (512MB RAM)
-- **Easy setup** — interactive script handles everything
+- **Easy setup** — interactive bootstrap script handles everything
 
 ## Quick Start
 
-Run this command on your **Proxmox host**:
+On your **Proxmox host**:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/ril3y/obsidian-livesync-lxc/main/obsidian-livesync-lxc.sh)"
+git clone https://github.com/sakoho81/obsidian-livesync-lxc.git
+cd obsidian-livesync-lxc
+./bootstrap.sh
 ```
 
-The script will:
-
-1. Create an LXC container
-2. Install and configure CouchDB
-3. Apply all LiveSync-compatible settings
-4. Create your Obsidian database
+The script will prompt for container configuration, create the LXC, and install CouchDB with LiveSync settings.
 
 After completion, you'll see:
 
@@ -35,15 +32,35 @@ After completion, you'll see:
 Container Details:
   ID:       102
   Hostname: obsidian-livesync
-  IP:       192.168.1.110
+  IP:       192.168.1.102
 
 CouchDB Admin Interface:
-  URL: http://192.168.1.110:5984/_utils
+  URL: http://192.168.1.102:5984/_utils
 
 Obsidian LiveSync Settings:
-  URI:      http://192.168.1.110:5984
+  URI:      http://192.168.1.102:5984
   Username: admin
   Database: obsidian
+```
+
+Next: [Set up the Obsidian client](docs/client-setup.md).
+
+## CLI Reference
+
+The `obsidian-livesync` tool runs inside the container (after `pct enter` or via `pct exec`):
+
+```
+obsidian-livesync install      # Install CouchDB + configure LiveSync
+obsidian-livesync setup-uri    # Generate an obsidian://setuplivesync URI
+obsidian-livesync db create/delete/list  # Manage databases
+obsidian-livesync check        # Verify CouchDB LiveSync config
+```
+
+From inside the container:
+
+```bash
+cd /opt/obsidian-livesync
+uv run obsidian-livesync --help
 ```
 
 ## Documentation
@@ -51,7 +68,7 @@ Obsidian LiveSync Settings:
 | Guide | Description |
 |-------|-------------|
 | [Client Setup](docs/client-setup.md) | Install the plugin, configure the remote database, enable encryption and sync |
-| [Setup URIs](docs/setup-uri.md) | One-click device setup with `obsidian://setuplivesync` URIs (GUI or CLI) |
+| [Setup URIs](docs/setup-uri.md) | One-click device setup with `obsidian://setuplivesync` URIs |
 | [Multiple Databases](docs/multiple-databases.md) | One vault = one CouchDB database. Create via Fauxton web UI or CLI |
 | [HTTPS Reverse Proxy](docs/https-reverse-proxy.md) | Required for mobile (iOS/Android). NPM, Cloudflare Tunnel, Caddy, Tailscale |
 | [Backup](docs/backup.md) | Full container backup with `vzdump`, database-only export, cron automation |
@@ -67,47 +84,41 @@ Obsidian LiveSync Settings:
 
 ## Alternative Installation Methods
 
-### Install on Existing LXC
+### Manual in-container install
 
-If you have an existing Debian/Ubuntu LXC container:
+If you have an existing Debian LXC container, clone the repo inside it and run:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/ril3y/obsidian-livesync-lxc/main/scripts/install.sh)"
+cd /opt
+git clone https://github.com/sakoho81/obsidian-livesync-lxc.git obsidian-livesync
+cd obsidian-livesync
+uv run obsidian-livesync install
 ```
 
-### Use Pre-built Template
+### Development
 
-1. Download from [Releases](https://github.com/ril3y/obsidian-livesync-lxc/releases)
-2. Copy to Proxmox:
-   ```bash
-   scp obsidian-livesync-*.tar.zst root@proxmox:/var/lib/vz/template/cache/
-   ```
-3. Restore:
-   ```bash
-   pct restore 102 /var/lib/vz/template/cache/obsidian-livesync-*.tar.zst
-   pct start 102
-   pct enter 102
-   /root/setup-couchdb.sh
-   ```
+```bash
+git clone https://github.com/sakoho81/obsidian-livesync-lxc.git
+cd obsidian-livesync-lxc
+uv sync --group dev
+uv run pytest
+uv run pre-commit run --all-files
+```
 
 ## Files
 
 ```
 obsidian-livesync-lxc/
-├── obsidian-livesync-lxc.sh    # Main Proxmox installer
-├── scripts/
-│   ├── install.sh              # Standalone CouchDB installer
-│   ├── create-database.sh      # Add databases for more vaults
-│   └── create-template.sh      # Export as shareable template
-├── docs/
-│   ├── client-setup.md
-│   ├── setup-uri.md
-│   ├── multiple-databases.md
-│   ├── https-reverse-proxy.md
-│   ├── backup.md
-│   └── troubleshooting.md
-├── README.md
-└── LICENSE
+├── bootstrap.sh                # Proxmox host entry point
+├── pyproject.toml              # Python project definition
+├── src/obsidian_livesync/      # Python package
+│   ├── cli.py                  # CLI (install, db, setup-uri, check)
+│   ├── config.py               # Credential management
+│   ├── couchdb.py              # CouchDB operations
+│   └── setup_uri.py            # Setup URI generation
+├── tests/                      # pytest test suite
+├── docs/                       # Documentation
+└── .github/workflows/          # CI
 ```
 
 ## Credits
@@ -115,7 +126,6 @@ obsidian-livesync-lxc/
 - [Obsidian](https://obsidian.md/) — The note-taking app
 - [Self-hosted LiveSync](https://github.com/vrtmrz/obsidian-livesync) by vrtmrz
 - [CouchDB](https://couchdb.apache.org/) — The database
-- Original guide from r/selfhosted community
 
 ## License
 

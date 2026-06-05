@@ -105,6 +105,15 @@ tail -f /opt/couchdb/var/log/couchdb.log
 ```
 
 ### Check current configuration
+
+From inside the container:
+
+```bash
+uv --project /opt/obsidian-livesync run obsidian-livesync check
+```
+
+Or manually:
+
 ```bash
 source /root/.obsidian-livesync-credentials
 curl -s "http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@127.0.0.1:5984/_node/_local/_config" | python3 -m json.tool
@@ -127,7 +136,8 @@ rm -rf /opt/couchdb/data/*
 systemctl start couchdb
 
 # Run setup again
-/root/setup-couchdb.sh  # or /root/obsidian-livesync/scripts/install.sh
+cd /opt/obsidian-livesync
+uv run obsidian-livesync install
 ```
 
 ## Getting Help
