@@ -1,5 +1,7 @@
 # Troubleshooting Guide
 
+See also: [Client Setup](./client-setup.md) | [Setup URIs](./setup-uri.md) | [HTTPS Reverse Proxy](./https-reverse-proxy.md)
+
 ## Common Issues
 
 ### "Database verification failed" in Obsidian
@@ -26,7 +28,7 @@ curl -s -X PUT "${COUCH_URL}/_node/_local/_config/cors/origins" -d '"app://obsid
 
 ### Mobile app can't connect
 
-Mobile apps require HTTPS. You need a reverse proxy with SSL.
+Mobile apps require HTTPS. Set up a reverse proxy — see [HTTPS Reverse Proxy](./https-reverse-proxy.md) for detailed guides.
 
 **Quick test with Cloudflare Tunnel:**
 ```bash
@@ -109,6 +111,8 @@ curl -s "http://${COUCHDB_USER}:${COUCHDB_PASSWORD}@127.0.0.1:5984/_node/_local/
 ```
 
 ## Reset Everything
+
+> Before resetting, consider taking a backup: [Backup guide](./backup.md)
 
 If you need to start fresh:
 
