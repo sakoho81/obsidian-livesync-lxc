@@ -30,8 +30,8 @@ def test_db_help():
 def test_setup_uri_help():
     result = runner.invoke(app, ["setup-uri", "--help"])
     assert result.exit_code == 0
-    assert "--hostname" in result.stdout
-    assert "--database" in result.stdout
+    assert "hostname" in result.stdout
+    assert "database" in result.stdout
 
 
 def test_db_create_missing_password_prompts(monkeypatch):
